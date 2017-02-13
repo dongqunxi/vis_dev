@@ -371,7 +371,7 @@ def sample1_clus_fixed(fn_list, n_per=8192, thre=5.3, p=0.01, tail=1,  del_vers=
                                     maybe you need to reset a lower p_threshold')
 
 
-def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
+def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration=0,
                  data=None, times=None, label='UnKonwn', p_accept=0.01, fnout=None):
     '''
     Extract information about the cluster test.
@@ -399,6 +399,12 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
         e.g., contrast = np.abs(X[0].mean(axis=0) - X[1].mean(axis=0))
 
     p_accept: p-value that defines the corrected p-value
+    
+    label: optional
+       provide a label for the type of the input data (condition)
+
+    min_duration: optional
+       if set > 0 than a minimum duration of cluster activity is required, otherwise the cluster will be rejected
 
     fnout: if set, statistics will be saved
     '''
@@ -426,6 +432,7 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
     txt.append('largest  p-value found (below sig. level): %0.6f\n' % cluster_p_values[good_cluster_inds].max())
     txt.append('number of vertices and time points: %d , %d\n\n' % (n_vert, n_times))
     txt.append('time step used for cluster analysis: %f\n' % t_step)
+        txt.append('minimum duration of cluster: %f\n' % min_duration)
     txt.append('=========================================================================\n')
 
     if n_good > 0:
@@ -478,9 +485,9 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
             txt.append('time window of sig. values [ms]: tmin = %d, tmax= %d\n' % (sig_tstart, sig_tend))
             txt.append('      duration of cluster activity [ms]: duration = %d\n' % sig_duration)
             if sig_duration < min_duration:
-                print sig_duration
+                #print sig_duration
                 cluster_p_values[clu_idx] = 1
-                txt.append('      Since its duration lower than %dms, it is rejected' % min_duration)
+                txt.append('      duration of cluster is below the minimum of %dms, cluster is rejected' % min_duration)
             txt.append('T/F-values in cluster:\n')
             txt.append('   min = %0.2f\n' % stats_min)
             txt.append('   max = %0.2f\n' % stats_max)
