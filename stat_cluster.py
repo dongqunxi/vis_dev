@@ -545,11 +545,11 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  min_duration=20, 
         name = os.path.basename(fn_npz)
         
         if tail == 1:
-            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f.npz' %(n_per, tail, pct)
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f_%.1f.npz' %(n_per, tail, pct, min_duration)
             X = np.abs(X)
             t_threshold = np.percentile(np.abs(X_b), pct)
         elif tail == 0:
-            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f.npz' %(n_per, tail+2, pct)
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f_%.1f.npz' %(n_per, tail+2, pct, min_duration)
             t_threshold = np.percentile(X_b, pct)
             
         fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
