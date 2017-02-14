@@ -50,6 +50,10 @@ def _merge_rois(mer_path, label_list):
         i = 0
         belong = False
         while (i < len(class_list)) and (belong is False):
+            fn_lost = '/home/uais/data/freesurfer/subjects/fsaverage/dSPM_conf_stc/STC_ROI/merge/LLrt,new_4-rh.label' 
+            #if class_list[i] == fn_lost:
+            #    import pdb
+            #    pdb.set_trace()
             class_label = mne.read_label(class_list[i])
             label_name = class_label.name
             if test_label.hemi != class_label.hemi:
@@ -68,14 +72,13 @@ def _merge_rois(mer_path, label_list):
                     new_pre = ''
                     for pre in pre_class[:-1]:
                         new_pre += '%s,' % pre
-                    new_pre = pre_class[-1]
-                    label_name = '%s_' % (new_pre) + \
-                        class_label.name.split('_')[-1]
+                    new_pre += pre_class[-1]
+                    label_name = '%s_' % (new_pre) + class_label.name.split('_')[-1]
                 os.remove(class_list[i])
                 os.remove(test_fn)
                 fn_newlabel = mer_path + '%s.label' %label_name
                 if os.path.isfile(fn_newlabel):
-                    fn_newlabel = fn_newlabel[:fn_newlabel.rfind('_')] + '_new, %s' % fn_newlabel.split('_')[-1]
+                    fn_newlabel = fn_newlabel[:fn_newlabel.rfind('-')] + ',new-%s' % fn_newlabel.split('-')[-1]
                 mne.write_label(fn_newlabel, com_label)
                 class_list[i] = fn_newlabel
                 belong = True
