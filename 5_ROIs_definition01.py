@@ -32,8 +32,8 @@ def set_directory(path=None):
     if not isexists:
         os.makedirs(path)
 
-#method = 'dSPM' 
-method = 'MNE'               
+method = 'dSPM' 
+#method = 'MNE'               
 subjects_dir = os.environ['SUBJECTS_DIR']
 stcs_path = subjects_dir + '/fsaverage/%s_conf_stc/' %method# the path of STC
 labels_path = stcs_path + 'STC_ROI/' # path where ROIs are saved
@@ -48,7 +48,7 @@ if do_ROIs:
     reset_directory(labels_path+'ini/')
     for cond in conditions:
         #fn_stc = stcs_path + 'clu2sample_Group_%s_4096_2tail_pthr0.0000001,pv_0.010' %(cond)
-        fn_stc = stcs_path + 'clu1sample_Group_%s_8192_2tail_pct99.900_25.0,pv_0.010-rh.stc' %cond
+        fn_stc = stcs_path + 'clu1sample_Group_%s_8192_2tail_pct99.999_25.0,pv_0.010-rh.stc' %cond
         stc = mne.read_source_estimate(fn_stc)
         lh_labels, rh_labels = mne.stc_to_label(stc, src=src, smooth=True,
                                         subjects_dir=subjects_dir, connected=True)
