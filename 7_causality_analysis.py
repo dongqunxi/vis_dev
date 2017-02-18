@@ -41,8 +41,8 @@ do_apply_STC_epo = False # Making STCs
 do_extract_rSTCs = False
 do_norm = False
 do_morder = False
-do_moesti = True
-do_cau = False
+do_moesti = False
+do_cau = True
 do_sig_thr = False
 do_group = False
 do_group_plot = False
@@ -102,15 +102,17 @@ if do_morder:
     print '>>> Calculate the optimized Model order....'
     fn_norm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npz')
     # Get optimized model order using BIC
-    model_order(fn_norm, p_max=100)
+    fn_npyout = subjects_dir+'/fsaverage/stcs/bics_esti.jpg'
+    model_order(fn_norm, p_max=100, fn_figout=fn_npyout)
     print '>>> FINISHED with optimized model order generation.'
     print ''
 
 if do_moesti:
     print '>>> Envaluate the cosistency, whiteness, and stable features of the Model....'
     fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm,morder*.npz')
+    fn_evalout = subjects_dir+'/fsaverage/stcs/estiMVAR.txt'
     #model_estimation(fn_monorm, morder=40)
-    model_estimation(fn_monorm)
+    model_estimation(fn_monorm, fn_evalout)
     print '>>> FINISHED with the results of statistical tests generation.'
     print ''
 

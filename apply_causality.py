@@ -164,11 +164,11 @@ def normalize_data(fn_ts, pre_t=0.2, fs=678.17):
         np.savez(fnnorm, X=z_data, S=npz['S'])
 
 
-def _plot_morder(bic, morder, figmorder):
+def _plot_morder(bics, morder, figmorder):
     '''
     Parameter
     ---------
-    bic: array
+    bics: array
        BIC values for each model order lower than 'p_max'.
     morder: int
       The optimized model order.
@@ -177,17 +177,19 @@ def _plot_morder(bic, morder, figmorder):
     '''
 
     plt.figure()
-    h0, = plt.plot(np.arange(len(bic)) + 1, bic, 'r', linewidth=3)
-    plt.legend([h0], ['BIC: %d' % morder])
+    
+    #h0, = plt.plot(np.arange(len(bic)) + 1, bic, 'r', linewidth=3)
+    #plt.legend([h0], ['BIC: %d' % morder])
+    plt.plot(np.arange(bics.shape[1]) + 1, bics.T)
     plt.xlabel('order')
     plt.ylabel('BIC')
-    plt.title('Model Order')
+    plt.title('Model Order: %d' %morder)
     plt.show()
-    plt.savefig(figmorder, dpi=100)
+    plt.savefig(figmorder, dpi=300)
     plt.close()
 
 
-def model_order(fn_norm, p_max=0):
+def model_order(fn_norm, p_max=0, fn_figout=None):
     """
     Calculate the optimized model order for VAR
     models from time series data.
@@ -204,6 +206,7 @@ def model_order(fn_norm, p_max=0):
         The optimized BIC model order.
     """
     path_list = get_files_from_list(fn_norm)
+    bics = []
     # loop across all filenames
     for fnnorm in path_list:
         npz = np.load(fnnorm)
@@ -269,12 +272,15 @@ def model_order(fn_norm, p_max=0):
             bic[i - 1] = -2 * L + K * math.log(M)
         # morder = np.nanmin(bic), np.nanargmin(bic) + 1
         morder = np.nanargmin(bic) + 1
-        figmorder = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.png' % morder
-        _plot_morder(bic, morder, figmorder)
+        bics.append(bic)
+        #figmorder = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.png' % morder
         fnnorm_p = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.npz' % morder
         np.savez(fnnorm_p, X=npz['X'], S=npz['S'], morder=morder)
         #return morder
-
+    bics = np.array(bics).squeeze(axis=-1)
+    #np.save(fn_figout, bics)
+    _plot_morder(bics, morder, fn_figout)
+    
 def _tsdata_to_var(X,p):
     """
     Calculate coefficients and recovariance and noise covariance of
@@ -442,7 +448,7 @@ def _consistency(X, E):
     return cons
 
 
-def model_estimation(fn_norm, thr_cons=0.8, whit_min=1., whit_max=3.,
+def model_estimation(fn_norm, fn_eval, thr_cons=0.8, whit_min=1., whit_max=3.,
                      morder=None):
     '''
     Check the statistical evalutions of the MVAR model corresponding the
@@ -470,14 +476,16 @@ def model_estimation(fn_norm, thr_cons=0.8, whit_min=1., whit_max=3.,
     
     for fnnorm in path_list:
         #fneval = fnnorm[:fnnorm.rfind('.npz')] + '_evaluation.txt'
+        pre_ = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
         npz = np.load(fnnorm)
         if morder == None:
             morder = npz['morder'].flatten()[0]
-            fneval = fnnorm[:fnnorm.rfind('.npz')] + '_evaluation.txt'
-        else:
-            fneval = fnnorm[:fnnorm.rfind(',morder')] + ',morder_%d_evaluation.txt' % morder
+            #fneval = fnnorm[:fnnorm.rfind('.npz')] + '_evaluation.txt'
+        #else:
+            #fneval = fnnorm[:fnnorm.rfind(',morder')] + ',morder_%d_evaluation.txt' % morder
         #X = np.load(fnnorm)
         print '>>> Model order is %d....' % morder
+        
         X = npz['X']
         A, SIG, E = _tsdata_to_var(X, morder)
         whi = False
@@ -495,9 +503,9 @@ def model_estimation(fn_norm, thr_cons=0.8, whit_min=1., whit_max=3.,
             print fnnorm
         # assert cons > thr_cons and is_st and whi, ('Consistency, whiteness, stability:\
         #                                    %f, %s, %s' %(cons, str(whi), str(is_st)))
-        with open(fneval, "a") as f:
-            f.write('model_order, whiteness, consistency, stability: %d, %s, %f, %s\n'
-                    % (morder, str(whi), cons, str(is_st)))
+        with open(fn_eval, "a") as f:
+            f.write('%s model_order, whiteness, consistency, stability: %d, %s, %f, %s\n'
+                    % (pre_, morder, str(whi), cons, str(is_st)))
 
 
 def _plot_hist(con_b, surr_b, fig_out):
