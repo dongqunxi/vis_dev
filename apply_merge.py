@@ -50,10 +50,6 @@ def _merge_rois(mer_path, label_list):
         i = 0
         belong = False
         while (i < len(class_list)) and (belong is False):
-            fn_lost = '/home/uais/data/freesurfer/subjects/fsaverage/dSPM_conf_stc/STC_ROI/merge/LLrt,new_4-rh.label' 
-            #if class_list[i] == fn_lost:
-            #    import pdb
-            #    pdb.set_trace()
             class_label = mne.read_label(class_list[i])
             label_name = class_label.name
             if test_label.hemi != class_label.hemi:
