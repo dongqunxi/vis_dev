@@ -432,7 +432,7 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration=0,
     txt.append('largest  p-value found (below sig. level): %0.6f\n' % cluster_p_values[good_cluster_inds].max())
     txt.append('number of vertices and time points: %d , %d\n\n' % (n_vert, n_times))
     txt.append('time step used for cluster analysis: %f\n' % t_step)
-        txt.append('minimum duration of cluster: %f\n' % min_duration)
+    txt.append('minimum duration of cluster: %f\n' % min_duration)
     txt.append('=========================================================================\n')
 
     if n_good > 0:
