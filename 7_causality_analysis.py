@@ -16,6 +16,7 @@ needs to be provided in the form of a text file,
 
 import os
 import glob
+import numpy as np
 from apply_causality import apply_inverse_oper, apply_STC_epo
 from apply_causality import (cal_labelts, normalize_data, sig_thresh,
                                    group_causality, model_order,
@@ -34,19 +35,19 @@ sfreq = 678.17 # Sampling rate
 per = 99.99 # Percentile for causal surrogates
 #ifre = int(sfreq / (2 * morder))
 #freqs = [(ifre, 2*ifre), (2*ifre, 3*ifre), (3*ifre, 4*ifre), (4*ifre, 5*ifre)]
-
+freqs = [(4, 8), (8, 12), (12, 18), (18, 30), (30, 40)]
 # Cluster operation
 do_apply_invers_oper = False # Making inverse operator
 do_apply_STC_epo = False # Making STCs
 do_extract_rSTCs = False
 do_norm = False
 do_morder = False
-do_moesti = True
+do_moesti = False
 do_cau = False
-do_sig_thr = False
-do_group = False
-do_group_plot = False
-do_diff = False
+#do_sig_thr = False
+do_group = True
+#do_group_plot = False
+do_diff = True
 
 ###############################################################################
 # Make inverse operator for each subject
@@ -125,19 +126,23 @@ if do_cau:
     print '>>> FINISHED with causal matrices and surr-causal matrices generation.'
     print ''
 
-if do_sig_thr:
-    print '>>> Calculate the significance of the causality matrices....'
-    fn_cau = glob.glob(cau_path + '/*[0-9]/sig_cau_40/*,cau.npy')
-    sig_thresh(cau_list=fn_cau, per=per)
-    print '>>> FINISHED with significant causal matrices generation.'
-    print ''
+
+#if do_sig_thr:
+#    print '>>> Calculate the significance of the causality matrices....'
+#    fn_cau = glob.glob(cau_path + '/*[0-9]/sig_cau_40/*,cau.npy')
+#    sig_thresh(cau_list=fn_cau, per=per)
+#    print '>>> FINISHED with significant causal matrices generation.'
+#    print ''
+
 
 if do_group:
     print '>>> Generate the group causal matrices....'
     for evt_st in st_list:
         out_path = cau_path + '/causality'
-        fnsig_list = glob.glob(cau_path + '/*[0-9]/sig_cau_40/%s_sig_con_band.npy' %evt_st)
-        group_causality(fnsig_list, evt_st, ROI_labels=ROIs, submount=10, out_path=out_path)
+        fnsig_list = glob.glob(cau_path + '/*[0-9]/sig_cau_21/%s_sig_con_band.npy' %evt_st)
+        fn_labels = subjects_dir+'/fsaverage/MNE_conf_stc/STC_ROI/func_list.npy'
+        ROIs_labels = np.load(fn_labels)
+        group_causality(fnsig_list, evt_st, freqs, ROIs_labels, submount=11, out_path=out_path)
     print '>>> FINISHED with group causal matrices generation.'
     print ''
 
@@ -147,4 +152,6 @@ if do_diff:
         fmin = ifreq[0]
         fmax = ifreq[1]
         mat_dir = cau_path + '/causality'
-        diff_mat(fmin=fmin, fmax=fmax, mat_dir=mat_dir, ROI_labels=ROIs)
+        fn_labels = subjects_dir+'/fsaverage/MNE_conf_stc/STC_ROI/func_list.npy'
+        ROIs_labels = np.load(fn_labels)
+        diff_mat(fmin=fmin, fmax=fmax, mat_dir=mat_dir, ROI_labels=ROIs_labels)

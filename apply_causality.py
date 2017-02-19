@@ -100,9 +100,24 @@ def cal_labelts(stcs_path, fn_func_list, condition='LLst',
     srcpath = minpath + '/bem/fsaverage-ico-5-src.fif'
     src_inv = mne.read_source_spaces(srcpath)
     # loop across all filenames
+     # Get common labels
+    list_file = fn_func_list
+    fn_labels = fn_func_list[:fn_func_list.rfind('.txt')] + '.npy'
+    with open(list_file, 'r') as fl:
+                file_list = [line.rstrip('\n') for line in fl]
+    fl.close()
+    rois = []
+    labels = []
+    for f in file_list:
+        label = mne.read_label(f)
+        labels.append(label)
+        rois.append(label.name)
+    rois = np.array(rois)
+    np.save(fn_labels, rois)
+    
     for stcs_path in path_list:
         caupath = stcs_path[:stcs_path.rfind('/%s' % condition)]
-        fn_stcs_labels = caupath + '/%s_labels_ts.npz' % (condition)
+        fn_stcs_labels = caupath + '/%s_labels_ts.npy' % (condition)
         _, _, files = os.walk(stcs_path).next()
         trials = len(files) / 2
         # Get unfiltered and morphed stcs
@@ -114,24 +129,13 @@ def cal_labelts(stcs_path, fn_func_list, condition='LLst',
                                            subject=min_subject)
             stcs.append(stc)
             i = i + 1
-        # Get common labels
-        list_file = fn_func_list
-        with open(list_file, 'r') as fl:
-                  file_list = [line.rstrip('\n') for line in fl]
-        fl.close()
-        rois = []
-        labels = []
-        for f in file_list:
-            label = mne.read_label(f)
-            labels.append(label)
-            rois.append(label.name)
+       
         # Extract stcs in common labels
         label_ts = mne.extract_label_time_course(stcs, labels, src_inv,
                                                  mode='pca_flip')
         # make label_ts's shape as (sources, samples, trials)
         label_ts = np.asarray(label_ts).transpose(1, 2, 0)
-        rois = np.array(rois)
-        np.savez(fn_stcs_labels, X=label_ts, S=rois)
+        np.save(fn_stcs_labels, X=label_ts)
 
 
 
@@ -153,15 +157,14 @@ def normalize_data(fn_ts, pre_t=0.2, fs=678.17):
     path_list = get_files_from_list(fn_ts)
     # loop across all filenames
     for fnts in path_list:
-        fnnorm = fnts[:fnts.rfind('.npz')] + ',norm.npz'
-        npz = np.load(fnts)
-        ts = npz['X']
+        fnnorm = fnts[:fnts.rfind('.npy')] + ',norm.npy'
+        ts = np.load(fnts)
         d_pre = ts[:, :int(pre_t*fs), :]
         d_pos = ts[:, int(pre_t*fs):, :]
         d_mu = d_pre.mean(axis=1, keepdims=True)
         d_std = d_pre.std(axis=1, ddof=1, keepdims=True)
         z_data = (d_pos - d_mu) / d_std
-        np.savez(fnnorm, X=z_data, S=npz['S'])
+        np.save(fnnorm, z_data)
 
 
 def _plot_morder(bics, morder, figmorder):
@@ -209,8 +212,7 @@ def model_order(fn_norm, p_max=0, fn_figout=None):
     bics = []
     # loop across all filenames
     for fnnorm in path_list:
-        npz = np.load(fnnorm)
-        X = npz['X']
+        X = np.load(fnnorm)
         n, m, N = X.shape
         if p_max == 0:
             p_max = m - 1
@@ -274,8 +276,8 @@ def model_order(fn_norm, p_max=0, fn_figout=None):
         morder = np.nanargmin(bic) + 1
         bics.append(bic)
         #figmorder = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.png' % morder
-        fnnorm_p = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.npz' % morder
-        np.savez(fnnorm_p, X=npz['X'], S=npz['S'], morder=morder)
+        fnnorm_p = fnnorm[:fnnorm.rfind('.npy')] + ',morder_%d.npz' % morder
+        np.savez(fnnorm_p, X=X, morder=morder)
         #return morder
     bics = np.array(bics).squeeze(axis=-1)
     #np.save(fn_figout, bics)
@@ -508,7 +510,7 @@ def model_estimation(fn_norm, fn_eval, thr_cons=0.8, whit_min=1., whit_max=3.,
                     % (pre_, morder, str(whi), cons, str(is_st)))
 
 
-def _plot_hist(con_b, surr_b, fig_out):
+def _plot_hist(con_b, surr_b, fig_out, pre_):
     '''
      Plot the distribution of real and surrogates' causality results.
      Parameter
@@ -523,17 +525,17 @@ def _plot_hist(con_b, surr_b, fig_out):
     import matplotlib.pyplot as pl
     fig = pl.figure('Histogram - surrogate vs real')
     c = con_b  # take a representative freq point
-    fig.add_subplot(211, title='Histogram - real connectivity')
+    fig.add_subplot(211, title='%s - real connectivity' %pre_)
     pl.hist(c, bins=100)  # plot histogram with 100 bins (representative)
     s = surr_b
-    fig.add_subplot(212, title='Histogram - surrogate connectivity')
+    fig.add_subplot(212, title='%s - surrogate connectivity' %pre_)
     pl.hist(s, bins=100)  # plot histogram
-    pl.show()
+    #plt.show()
     pl.savefig(fig_out)
     pl.close()
 
 
-def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out):
+def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out, title):
     '''
     Plot the significant threshold of causality analysis.
     Parameter
@@ -560,6 +562,7 @@ def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out):
     plt.legend()
     plt.xlabel('points')
     plt.ylabel('causality values')
+    plt.title(title)
     # pl.show()
     plt.savefig(fig_out)
     plt.close()
@@ -567,7 +570,7 @@ def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out):
 
 
 def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
-                    msave=True, per=99.99, sfreq=678,
+                    msave=False, per=99.99, sfreq=678,
                     freqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30, 40)]):
     '''
     Calculate causality matrices of real data and surrogates. And calculate
@@ -622,12 +625,14 @@ def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
         if msave:
             np.save(fncau, cau)
             np.save(fnsurr, surr)
+            
         nfft = cau.shape[-1]
         delta_F = sfreq / float(2 * nfft)
         sig_freqs = []
         nfreq = len(freqs)
         surr_bands = []
         cau_bands = []
+        title = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
         for ifreq in range(nfreq):
             print 'Frequency index used..', ifreq
             fmin, fmax = int(freqs[ifreq][0] / delta_F), int(freqs[ifreq][1] /
@@ -653,9 +658,9 @@ def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
                 % (condition, freqs[ifreq][0], freqs[ifreq][1])
             throut = sig_path + '%s,%d-%d,threshold.png'\
                 % (condition, freqs[ifreq][0], freqs[ifreq][1])
-            _plot_hist(con_b, surr_b, histout)
+            _plot_hist(con_b, surr_b, histout, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
             # _plot_thr(con_b, thr, surr_band.max(), alpha, throut)
-            _plot_thr(con_b, thr, surr_band.max(), per, throut)
+            _plot_thr(con_b, thr, surr_band.max(), per, throut, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
             # con_band[con_band < z_thre] = 0
             # con_band[con_band >= z_thre] = 1
             sig_freqs.append(con_band)
@@ -663,10 +668,6 @@ def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
         sig_freqs = np.array(sig_freqs)
         print 'Saving computed arrays..'
         np.save(sig_path + '%s_sig_con_band.npy' % condition, sig_freqs)
-        cau_bands = np.array(cau_bands)
-        np.save(fncau, cau_bands)
-        surr_bands = np.array(surr_bands)
-        np.save(fnsurr, surr_bands)
 
     return
 
@@ -698,7 +699,7 @@ def sig_thresh(cau_list, freqs, per=99.99, sfreq=678):
         surr = np.load(fnsurr)
         nfft = cau.shape[-1]
         delta_F = sfreq / float(2 * nfft)
-        # freqs = [(4, 8), (8, 12), (12, 18), (18, 30), (30, 70), (60, 90)]
+        
         sig_freqs = []
         nfreq = len(freqs)
         for ifreq in range(nfreq):
@@ -733,8 +734,7 @@ def sig_thresh(cau_list, freqs, per=99.99, sfreq=678):
         np.save(sig_path + '%s_sig_con_band.npy' %condition, sig_freqs)
 
 
-def group_causality(sig_list, condition, ROI_labels, freqs,
-                    out_path=None, submount=10):
+def group_causality(sig_list, condition, freqs, ROI_labels, out_path=None, submount=10):
 
     """
     Make group causality analysis, by evaluating significant matrices across
@@ -772,8 +772,8 @@ def group_causality(sig_list, condition, ROI_labels, freqs,
         cmap = plt.get_cmap('hot', cau_band.max()+1-submount)
         cmap.set_under('gray')
         plt.matshow(cau_band, interpolation='nearest', vmin=submount, cmap=cmap)
-        plt.xticks(np.arange(16), ROI_labels, fontsize=9, rotation='vertical')
-        plt.yticks(np.arange(16), ROI_labels, fontsize=9)
+        plt.xticks(np.arange(len(ROI_labels)), ROI_labels, fontsize=9, rotation='vertical')
+        plt.yticks(np.arange(len(ROI_labels)), ROI_labels, fontsize=9)
         # pl.imshow(cau_band, interpolation='nearest')
         # pl.set_cmap('BlueRedAlpha')
         np.save(out_path + '/%s_%s_%sHz.npy' %
@@ -791,9 +791,7 @@ def group_causality(sig_list, condition, ROI_labels, freqs,
     return
 
 
-def plt_conditions(cau_path, st_list,
-                   nfreqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30,40)],
-                   am_ROI=21):
+def plt_conditions(cau_path, st_list, ROI_labels, nfreqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30,40)]):
 
     '''
     Plot the causal matrix of each frequency band
@@ -810,7 +808,7 @@ def plt_conditions(cau_path, st_list,
         The amount of ROIs
     '''
 
-    lbls = np.arange(am_ROI) + 1
+    #lbls = np.arange(am_ROI) + 1
     for ifreq in nfreqs:
         fmin, fmax = ifreq[0], ifreq[1]
         fig_fobj = cau_path + '/conditions4_%d_%dHz.tiff' % (fmin, fmax)
@@ -823,10 +821,10 @@ def plt_conditions(cau_path, st_list,
             title = st_list[i]
             ax.grid(False)
             ax.set_title(title)
-            ax.set_yticks(np.arange(am_ROI))
-            ax.set_xticks(np.arange(am_ROI))
-            ax.set_xticklabels(lbls)
-            ax.set_yticklabels(lbls)
+            ax.set_yticks(np.arange(len(ROI_labels)))
+            ax.set_xticks(np.arange(len(ROI_labels)))
+            ax.set_xticklabels(ROI_labels)
+            ax.set_yticklabels(ROI_labels)
         # fig.colorbar(im, cax=cbar_ax)
         fig.tight_layout()
         fig.savefig(fig_fobj)
