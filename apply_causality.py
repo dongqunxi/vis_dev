@@ -785,6 +785,8 @@ def group_causality(sig_list, condition, freqs, ROI_labels, out_path=None, submo
 
         plt.colorbar(ticks=v, extend='min')
         # pl.show()
+        plt.xlabel('%s_%s_%sHz.png' %(condition, str(fmin), str(fmax)))
+        #plt.tight_layout()
         plt.savefig(out_path + '/%s_%s_%sHz.png' %
                     (condition, str(fmin), str(fmax)), dpi=300)
         plt.close()
@@ -869,7 +871,8 @@ def diff_mat(fmin, fmax, mat_dir=None, ROI_labels=None,
     plt.matshow(dif_cau, interpolation='nearest')
     plt.xticks(np.arange(am_ROI), ROI_labels, fontsize=9, rotation='vertical')
     plt.yticks(np.arange(am_ROI), ROI_labels, fontsize=9)
-    # pl.tight_layout(pad=2)
+    plt.xlabel('incon - con_%d-%dHz' % (fmin, fmax))
+    #plt.tight_layout()
     # pl.show()
     plt.savefig(fig_dif, dpi=300)
     plt.close()
