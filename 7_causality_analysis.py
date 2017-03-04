@@ -3,7 +3,7 @@
 =================================================================
 Causality analysis
 =================================================================
-date: 17/02/2017
+date: 22/02/2017
 
 Before running this script, the absolute path of each ROI label
 needs to be provided in the form of a text file,
@@ -33,9 +33,10 @@ st_list = ['LLst', 'RRst', 'RLst',  'LRst']
 sfreq = 678.17 # Sampling rate
 #morder = 40 # Fixed model order
 per = 99.99 # Percentile for causal surrogates
+repeat = 1000
 #ifre = int(sfreq / (2 * morder))
 #freqs = [(ifre, 2*ifre), (2*ifre, 3*ifre), (3*ifre, 4*ifre), (4*ifre, 5*ifre)]
-freqs = [(4, 8), (8, 12), (12, 18), (18, 30), (30, 40)]
+freqs = [(4, 8), (8, 12), (12, 18), (18, 30), (30, 45)]
 # Cluster operation
 do_apply_invers_oper = False # Making inverse operator
 do_apply_STC_epo = False # Making STCs
@@ -92,6 +93,7 @@ if do_extract_rSTCs:
 if do_norm:
     print '>>> Calculate normalized rSTCs ....'
     ts_path = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts.npz')
+    ts_path = sorted(ts_path)
     normalize_data(ts_path)
     print '>>> FINISHED with normalized rSTC generation.'
     print ''
@@ -101,7 +103,7 @@ if do_norm:
 # 2) Causality analysis
 if do_morder:
     print '>>> Calculate the optimized Model order....'
-    fn_norm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npz')
+    fn_norm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npy')
     # Get optimized model order using BIC
     fn_npyout = subjects_dir+'/fsaverage/stcs/bics_esti.jpg'
     model_order(fn_norm, p_max=100, fn_figout=fn_npyout)
@@ -110,7 +112,7 @@ if do_morder:
 
 if do_moesti:
     print '>>> Envaluate the cosistency, whiteness, and stable features of the Model....'
-    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm,morder*.npz')
+    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npz')
     fn_evalout = subjects_dir+'/fsaverage/stcs/estiMVAR.txt'
     #model_estimation(fn_monorm, morder=40)
     model_estimation(fn_monorm, fn_evalout)
@@ -119,10 +121,11 @@ if do_moesti:
 
 if do_cau:
     print '>>> Make the causality analysis....'
-    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm,morder*.npz')
+    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npz')
+    fn_monorm = sorted(fn_monorm)
     # fn_monorm = glob.glob(cau_path + '/*[0-9]/*_labels_ts,norm.npy')
     #causal_analysis(fn_monorm[1:16], repeats=1000, morder=40, per=per, method='GPDC')
-    causal_analysis(fn_monorm, repeats=1000, per=per, method='GPDC')
+    causal_analysis(fn_monorm, repeats=repeat, per=per, method='GPDC')
     print '>>> FINISHED with causal matrices and surr-causal matrices generation.'
     print ''
 
