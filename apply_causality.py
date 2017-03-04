@@ -117,25 +117,39 @@ def cal_labelts(stcs_path, fn_func_list, condition='LLst',
     
     for stcs_path in path_list:
         caupath = stcs_path[:stcs_path.rfind('/%s' % condition)]
-        fn_stcs_labels = caupath + '/%s_labels_ts.npy' % (condition)
+        fn_norm = caupath + '/%s_labels_ts,norm.npy' % (condition)
+        #fn_base_stcs = fn_stcs_labels[:fn_stcs_labels.rfind('_label')] + '_baseline.npy'
         _, _, files = os.walk(stcs_path).next()
         trials = len(files) / 2
         # Get unfiltered and morphed stcs
         stcs = []
+        bs_stcs = []
         i = 0
         while i < trials:
             fn_stc = stcs_path + 'trial%s_fsaverage' % (str(i))
             stc = mne.read_source_estimate(fn_stc + '-lh.stc',
                                            subject=min_subject)
-            stcs.append(stc)
+            bs_stc = stc.copy().crop(stc.times.min(), 0)
+            bs_stcs.append(bs_stc.data)
+            stcs.append(stc.crop(0, stc.times.max()))
             i = i + 1
        
         # Extract stcs in common labels
+     
         label_ts = mne.extract_label_time_course(stcs, labels, src_inv,
                                                  mode='pca_flip')
         # make label_ts's shape as (sources, samples, trials)
         label_ts = np.asarray(label_ts).transpose(1, 2, 0)
-        np.save(fn_stcs_labels, X=label_ts)
+        bs_stcs = np.asarray(bs_stcs).transpose(1, 2, 0)
+        d_mu = bs_stcs.mean()
+        d_std = bs_stcs.std()
+        z_data = (label_ts - d_mu) / d_std
+        pre_ = fn_norm.split('/')[-2] + '_%s' %fn_norm.split('/')[-1].split('_')[0]
+        print '%s, scalar: mean %f, std %s' %(pre_, d_mu, d_std)
+        import pdb
+        pdb.set_trace()
+        #np.save(fn_norm, z_data)
+
 
 
 
@@ -157,13 +171,22 @@ def normalize_data(fn_ts, pre_t=0.2, fs=678.17):
     path_list = get_files_from_list(fn_ts)
     # loop across all filenames
     for fnts in path_list:
-        fnnorm = fnts[:fnts.rfind('.npy')] + ',norm.npy'
-        ts = np.load(fnts)
+        fnnorm = fnts[:fnts.rfind('.npz')] + ',norm.npy'
+        npz = np.load(fnts)
+        ts = npz['X']
+        #ts = np.load(fnts)
         d_pre = ts[:, :int(pre_t*fs), :]
         d_pos = ts[:, int(pre_t*fs):, :]
-        d_mu = d_pre.mean(axis=1, keepdims=True)
-        d_std = d_pre.std(axis=1, ddof=1, keepdims=True)
+        d_mu = []
+        d_std = []
+        for d_ in d_pre:
+            d_mu.append(d_.mean(keepdims=True))
+            d_std.append(d_.std(ddof=1, keepdims=True))
+        
+        d_mu = np.array(d_mu)
+        d_std = np.array(d_std)
         z_data = (d_pos - d_mu) / d_std
+        #pre_ = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
         np.save(fnnorm, z_data)
 
 
@@ -187,6 +210,8 @@ def _plot_morder(bics, morder, figmorder):
     plt.xlabel('order')
     plt.ylabel('BIC')
     plt.title('Model Order: %d' %morder)
+    ymin, ymax = plt.ylim()
+    plt.vlines(morder, ymin, ymax)
     plt.show()
     plt.savefig(figmorder, dpi=300)
     plt.close()
@@ -276,7 +301,7 @@ def model_order(fn_norm, p_max=0, fn_figout=None):
         morder = np.nanargmin(bic) + 1
         bics.append(bic)
         #figmorder = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.png' % morder
-        fnnorm_p = fnnorm[:fnnorm.rfind('.npy')] + ',morder_%d.npz' % morder
+        fnnorm_p = fnnorm[:fnnorm.rfind('.npy')] + '.npz' 
         np.savez(fnnorm_p, X=X, morder=morder)
         #return morder
     bics = np.array(bics).squeeze(axis=-1)
@@ -532,7 +557,7 @@ def _plot_hist(con_b, surr_b, fig_out, pre_):
     pl.hist(s, bins=100)  # plot histogram
     #plt.show()
     pl.savefig(fig_out)
-    pl.close()
+    pl.close(fig)
 
 
 def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out, title):
@@ -550,8 +575,9 @@ def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out, title):
        The path to store the threshold plots.
     '''
     # plt.ioff()
-    plt.close('all')
+    #plt.close('all')
     c = np.unique(con_b)
+    plt.figure('thre')
     plt.plot(c, 'k', label='real con')
     xmin, xmax = plt.xlim()
     plt.hlines(fdr_thr, xmin, xmax, linestyle='--', colors='k',
@@ -565,13 +591,13 @@ def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out, title):
     plt.title(title)
     # pl.show()
     plt.savefig(fig_out)
-    plt.close()
+    plt.close('thre')
     return
 
 
 def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
-                    msave=False, per=99.99, sfreq=678,
-                    freqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30, 40)]):
+                    msave=False, per=99.99, sfreq=678, ncond=4,
+                    freqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30, 45)]):
     '''
     Calculate causality matrices of real data and surrogates. And calculate
     the significant causal matrix for each frequency band.
@@ -599,75 +625,123 @@ def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
     import scot
     path_list = get_files_from_list(fn_norm)
     # loop across all filenames
-    for fnnorm in path_list:
-        cau_path = os.path.split(fnnorm)[0]
-        name = os.path.basename(fnnorm)
-        condition = name.split('_')[0]
-        npz = np.load(fnnorm)
-        if morder == None:
-            morder = npz['morder'].flatten()[0]
-            fncau = fnnorm[:fnnorm.rfind('.npz')] + ',cau.npy' 
-            fnsurr = fnnorm[:fnnorm.rfind('.npz')] + ',surrcau.npy'
-        else:
-            fncau = fnnorm[:fnnorm.rfind(',morder')] + ',morder%d,cau.npy' % morder
-            fnsurr = fnnorm[:fnnorm.rfind(',morder')] + ',morder%d,surrcau.npy' % morder
-        
-        sig_path = cau_path + '/sig_cau_%d/' % morder
-        set_directory(sig_path)
-        
-        X = npz['X']
-        X = X.transpose(2, 0, 1)
-        mvar = scot.var.VAR(morder)
-        surr = scs.surrogate_connectivity(method, X, mvar,
-                                          repeats=repeats)
-        mvar.fit(X)
-        cau = connectivity(method, mvar.coef, mvar.rescov)
-        if msave:
-            np.save(fncau, cau)
-            np.save(fnsurr, surr)
+    nsubjects = len(path_list)/ncond
+    fn_list = np.reshape(path_list,(nsubjects,ncond)) 
+    bands = ['theta', 'alpha', 'beta1', 'beta2', 'gamma']
+    for isubj in range(nsubjects):
+        plt.figure('axes')
+        sub_fig = [221, 222, 223, 224]
+       
+        for icond in range(ncond):
+            fnnorm = fn_list[isubj, icond]
+            title = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
+            cau_path = os.path.split(fnnorm)[0]
+            name = os.path.basename(fnnorm)
+            condition = name.split('_')[0]
+            npz = np.load(fnnorm)
+            if morder == None:
+                morder = npz['morder'].flatten()[0]
+                fncau = fnnorm[:fnnorm.rfind('.npz')] + ',cau.npy' 
+                fnsurr = fnnorm[:fnnorm.rfind('.npz')] + ',surrcau.npy'
+            else:
+                fncau = fnnorm[:fnnorm.rfind('.npy')] + ',morder%d,cau.npy' % morder
+                fnsurr = fnnorm[:fnnorm.rfind('.npy')] + ',morder%d,surrcau.npy' % morder
             
-        nfft = cau.shape[-1]
-        delta_F = sfreq / float(2 * nfft)
-        sig_freqs = []
-        nfreq = len(freqs)
-        surr_bands = []
-        cau_bands = []
-        title = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
-        for ifreq in range(nfreq):
-            print 'Frequency index used..', ifreq
-            fmin, fmax = int(freqs[ifreq][0] / delta_F), int(freqs[ifreq][1] /
-                                                             delta_F)
-            con_band = np.mean(cau[:, :, fmin:fmax + 1], axis=-1)
-            np.fill_diagonal(con_band, 0)
-            surr_band = np.mean(surr[:, :, :, fmin:fmax + 1], axis=-1)
-            r, s, _ = surr_band.shape
-            for i in xrange(r):
-                ts = surr_band[i]
-                np.fill_diagonal(ts, 0)
-            surr_bands.append(surr_band)
-            cau_bands.append(con_band)
-            con_b = con_band.flatten()
-            con_b = con_b[con_b > 0]
-            surr_b = surr_band.reshape(r, s * s)
-            surr_b = surr_b[surr_b > 0]
-            thr = np.percentile(surr_band, per)
-            print 'max surrogates %.4f' % thr
-            con_band[con_band < thr] = 0
-            con_band[con_band >= thr] = 1
-            histout = sig_path + '%s,%d-%d,distribution.png'\
-                % (condition, freqs[ifreq][0], freqs[ifreq][1])
-            throut = sig_path + '%s,%d-%d,threshold.png'\
-                % (condition, freqs[ifreq][0], freqs[ifreq][1])
-            _plot_hist(con_b, surr_b, histout, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
-            # _plot_thr(con_b, thr, surr_band.max(), alpha, throut)
-            _plot_thr(con_b, thr, surr_band.max(), per, throut, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
-            # con_band[con_band < z_thre] = 0
-            # con_band[con_band >= z_thre] = 1
-            sig_freqs.append(con_band)
-
-        sig_freqs = np.array(sig_freqs)
-        print 'Saving computed arrays..'
-        np.save(sig_path + '%s_sig_con_band.npy' % condition, sig_freqs)
+            sig_path = cau_path + '/sig_cau_%d/' % morder
+            set_directory(sig_path)
+            
+            X = npz['X']
+            X = X.transpose(2, 0, 1)
+            mvar = scot.var.VAR(morder)
+            surr = scs.surrogate_connectivity(method, X, mvar,
+                                            repeats=repeats)
+            mvar.fit(X)
+            cau = connectivity(method, mvar.coef, mvar.rescov)
+            if msave:
+                np.save(fncau, cau)
+                np.save(fnsurr, surr)
+                
+            nfft = cau.shape[-1]
+            delta_F = sfreq / float(2 * nfft)
+            sig_freqs = []
+            nfreq = len(freqs)
+            surr_bands = []
+            cau_bands = []
+            
+            thres = []
+            maxes = []
+            for ifreq in range(nfreq):
+                print 'Frequency index used..', ifreq
+                fmin, fmax = int(freqs[ifreq][0] / delta_F), int(freqs[ifreq][1] /
+                                                                delta_F)
+                con_band = np.mean(cau[:, :, fmin:fmax + 1], axis=-1)
+                np.fill_diagonal(con_band, 0)
+                surr_band = np.mean(surr[:, :, :, fmin:fmax + 1], axis=-1)
+                r, s, _ = surr_band.shape
+                for i in xrange(r):
+                    ts = surr_band[i]
+                    np.fill_diagonal(ts, 0)
+                surr_bands.append(surr_band)
+                cau_bands.append(con_band)
+                con_b = con_band.flatten()
+                con_b = con_b[con_b > 0]
+                surr_b = surr_band.reshape(r, s * s)
+                surr_b = surr_b[surr_b > 0]
+                
+                thr = np.percentile(surr_band, per)
+                max_value = surr_band.max()
+                thres.append(thr)
+                maxes.append(max_value)
+                
+                print 'max surrogates %.4f' % thr
+                con_band[con_band < thr] = 0
+                con_band[con_band >= thr] = 1
+                histout = sig_path + '%s,%d-%d,distribution.png'\
+                    % (condition, freqs[ifreq][0], freqs[ifreq][1])
+                throut = sig_path + '%s,%d-%d,threshold.png'\
+                    % (condition, freqs[ifreq][0], freqs[ifreq][1])
+                _plot_hist(con_b, surr_b, histout, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
+                # _plot_thr(con_b, thr, surr_band.max(), alpha, throut)
+                _plot_thr(con_b, thr, max_value, per, throut, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
+                sig_freqs.append(con_band)
+    
+            sig_freqs = np.array(sig_freqs)
+            print 'Saving computed arrays..'
+            np.save(sig_path + '%s_sig_con_band.npy' % condition, sig_freqs)
+            del cau, surr
+            
+            ax = plt.subplot(sub_fig[icond])
+            plt.ylim(0, 0.5)
+            ax.set_xlabel('bands')
+            ax.set_ylabel('scales')
+            plt.title('%s' %fnnorm.split('/')[-1].split('_')[0])
+            
+            width = 0.35
+            index = np.arange(len(thres)) 
+            
+            plt.bar(index, thres, width, color='blue', label='99.99per')
+            i = 0
+            for x, y in zip(index, thres): 
+                plt.text(x+0.3,y+0.01, '%.2f' %y, ha='center', va='bottom', rotation=90)
+                i = i + 1
+            
+            plt.bar(index+width, maxes, width, color='yellow', label='maxes')
+            j = 0
+            for x, y in zip(index, maxes): 
+                plt.text(x+0.6,y+0.01, '%.2f' %y, ha='center', va='bottom', rotation=90)
+                j = j + 1
+                
+            plt.xticks(index + width, bands)
+            plt.legend(loc='upper center', fontsize='x-small')
+            #plt.legend(loc='upper left')
+        
+        plt.suptitle(fnnorm.split('/')[-2])
+        plt.tight_layout()
+        fn_fig_out = sig_path + '%s_sig_con_band.png' %fnnorm.split('/')[-2]
+        plt.savefig(fn_fig_out)
+        plt.close('axes')
+        #import pdb
+        #pdb.set_trace()
 
     return
 
@@ -793,7 +867,7 @@ def group_causality(sig_list, condition, freqs, ROI_labels, out_path=None, submo
     return
 
 
-def plt_conditions(cau_path, st_list, ROI_labels, nfreqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30,40)]):
+def plt_conditions(cau_path, st_list, ROI_labels, nfreqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30,45)]):
 
     '''
     Plot the causal matrix of each frequency band
