@@ -5,14 +5,10 @@ import numpy as np
 import glob
 import matplotlib.pyplot as plt
 
-#subjects_dir = os.environ['SUBJECTS_DIR']
-#stcs_path = subjects_dir + '/fsaverage/conf_stc/'
-
-#fn_cau = subjects_dir + '/stcs/109077/LLst_labels_ts,norm,morder40,cau.npy'
-#fn_surr = subjects_dir + '/stcs/109077/LLst_labels_ts,norm,morder40,surrcau.npy'
-fn_cau = '/home/uais_common/dong/freesurfer/subjects/fsaverage/stcs/201195/LLst_labels_ts,norm,cau.npy'
-fn_surr = '/home/uais_common/dong/freesurfer/subjects/fsaverage/stcs/201195/LLst_labels_ts,norm,surrcau.npy'
-fn_labels = '/home/uais_common/dong/freesurfer/subjects/fsaverage/MNE_conf_stc/STC_ROI/func_list.npy'
+subjects_dir = os.environ['SUBJECTS_DIR']
+fn_cau = subjects_dir + '/fsaverage/stcs/201195/LLst_labels_ts,norm,cau.npy'
+fn_surr = subjects_dir + '/fsaverage/stcs/201195/LLst_labels_ts,norm,surrcau.npy'
+fn_labels = subjects_dir + '/fsaverage/MNE_conf_stc/STC_ROI/func_list.npy'
 ROIs_labels = np.load(fn_labels)
 con = np.load(fn_cau)
 surr_subject = np.load(fn_surr)
