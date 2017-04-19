@@ -37,8 +37,19 @@ for evt_st in st_list:
     # zero those which are below the minimum expected number of subjects
     counts[counts < thresh] = 0   # not really necessary as we will reject this later with pval
     
+    # reduce dignoal elements
+    rd_counts = np.zeros((n_freqs, n_rois, n_rois-1))
+    for i in range(n_rois):
+        if (i-1 >= 0) and (i+1 < n_rois):
+            rd_counts[:, i, :i] = counts[:, i,:i]
+            rd_counts[:, i, i:] = counts[:, i, i+1:]
+        elif (i-1) < 0:
+            rd_counts[:, i, :] = counts[:, i, i+1:]
+        elif (i+1) == n_rois:
+            rd_counts[:, i, :] = counts[:, i,:i]
+
     # compute p-values
-    pval = 1 - stats.binom.cdf(counts, n_subj, prob)
+    pval = 1 - stats.binom.cdf(rd_counts, n_subj, prob)
     
     # use FDR to correct for multiple comparison
     reject_mask = np.zeros(pval.shape)
@@ -46,9 +57,22 @@ for evt_st in st_list:
        reject_mask[:, iroi, :], _ = fdr_correction(pval[:, iroi, :], alpha) 
     #reject_mask, pval_fdr = fdr_correction(pval, alpha)
     
+    # increase the dignoal elements and set them as False
+    in_reject_mask = np.zeros((n_freqs, n_rois, n_rois))
+    for i in range(n_rois):
+        if (i-1 >= 0) and (i+1 < n_rois):
+            in_reject_mask[:, i, :i] = reject_mask[:, i,:i]
+            in_reject_mask[:, i, i] = False
+            in_reject_mask[:, i, i+1:] = reject_mask[:, i, i:]
+        elif (i-1) < 0:
+            in_reject_mask[:, i, i] = False
+            in_reject_mask[:, i, i+1:] = reject_mask[:, i, :]
+        elif (i+1) == n_rois:
+            in_reject_mask[:, i, :i] = reject_mask[:, i,:]
+            in_reject_mask[:, i, i] = False
     
     # remove non-significant connections
     for isubj in range(n_subj):
-        X[isubj] *= reject_mask
+        X[isubj] *= in_reject_mask
 
 
