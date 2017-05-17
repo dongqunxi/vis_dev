@@ -8,12 +8,14 @@ from mne.stats import fdr_correction
 import scipy.stats as stats
 
 subjects_dir = os.environ['SUBJECTS_DIR']
-cau_path = subjects_dir+'/fsaverage/stcs/' 
-#st_list = ['LLst', 'RRst', 'RLst',  'LRst']
-st_list = ['LLst']
+cau_path = subjects_dir+'/fsaverage/stcs/'
+out_path =  cau_path + 'causality/'
+st_list = ['LLst', 'RRst', 'RLst',  'LRst']
+nfreqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30,45)]
+#st_list = ['LLst']
 # Stats set-up
 prob = 0.5           # we assume the probability of chance
-alpha = 0.05         # False alarm rate
+alpha = 0.01         # False alarm rate
 # we need to load all data in one array as we later perform FDR correction
 # the content of the data should be 1 (above surrogate) or 0 (below surrogate threshold
 
@@ -74,5 +76,11 @@ for evt_st in st_list:
     # remove non-significant connections
     for isubj in range(n_subj):
         X[isubj] *= in_reject_mask
+  
+    Y = X.sum(axis=0)
+    for ifreq in range(len(nfreqs)):
+        fmin, fmax = nfreqs[ifreq][0], nfreqs[ifreq][1]
+        np.save(out_path + '%s_%d_%dHz.npy' % (evt_st, fmin, fmax), Y[ifreq])
+    #np.save(out_path+'%s_sigcaus.npy' %evt_st, X)
 
 
