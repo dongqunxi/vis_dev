@@ -1,11 +1,14 @@
 import numpy as np
+import glob
 import PIL
 from PIL import Image
 bands = ['theta', 'alpha', 'low_beta', 'high_beta', 'gamma']
-fn_out = 'bands.jpg' 
+fn_out = 'diff_networks/bands.jpg' 
 list_ims = []
 for band in bands:
-    list_im = ['%s_icon_con.jpg' %band, 'incon_con_%s.jpg' %band]
+    #list_im = ['%s_icon_con.jpg' %band, 'incon_con_%s.jpg' %band]
+    list_im = glob.glob('diff_networks/*_%s.jpg' %band)
+    list_im = sorted(list_im)
     list_ims.append(list_im)
 #list_im2 = ['RL_%s.jpg' %band, 'LR_%s.jpg' %band]
 #list_im1 = sorted(list_im1)
