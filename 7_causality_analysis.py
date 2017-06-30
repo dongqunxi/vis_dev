@@ -3,7 +3,7 @@
 =================================================================
 Causality analysis
 =================================================================
-date: 17/02/2017
+date: 22/02/2017
 
 Before running this script, the absolute path of each ROI label
 needs to be provided in the form of a text file,
@@ -14,11 +14,12 @@ needs to be provided in the form of a text file,
 #         Jürgen Dammers <j.dammers@fz-juelich.de>
 # License: BSD (3-clause)
 
-import os
+import os, mne
 import glob
+import numpy as np
 from apply_causality import apply_inverse_oper, apply_STC_epo
 from apply_causality import (cal_labelts, normalize_data, sig_thresh,
-                                   group_causality, model_order,
+                                   group_causality, model_order1,
                                    model_estimation, causal_analysis, diff_mat)
 
 print(__doc__)
@@ -32,9 +33,10 @@ st_list = ['LLst', 'RRst', 'RLst',  'LRst']
 sfreq = 678.17 # Sampling rate
 #morder = 40 # Fixed model order
 per = 99.99 # Percentile for causal surrogates
+repeat = 1000
 #ifre = int(sfreq / (2 * morder))
 #freqs = [(ifre, 2*ifre), (2*ifre, 3*ifre), (3*ifre, 4*ifre), (4*ifre, 5*ifre)]
-
+freqs = [(4, 8), (8, 12), (12, 18), (18, 30), (30, 45)]
 # Cluster operation
 do_apply_invers_oper = False # Making inverse operator
 do_apply_STC_epo = False # Making STCs
@@ -43,9 +45,9 @@ do_norm = False
 do_morder = False
 do_moesti = False
 do_cau = True
-do_sig_thr = False
+#do_sig_thr = False
 do_group = False
-do_group_plot = False
+#do_group_plot = False
 do_diff = False
 
 ###############################################################################
@@ -76,12 +78,16 @@ if do_apply_STC_epo:
 if do_extract_rSTCs:
     print '>>> Calculate representative STCs ....'
     func_list_file = subjects_dir+'/fsaverage/MNE_conf_stc/STC_ROI/func_list.txt'
+    minpath = subjects_dir + '/fsaverage'
+    srcpath = minpath + '/bem/fsaverage-ico-5-src.fif'
+    src_inv = mne.read_source_spaces(srcpath)
     for evt_st in st_list:
         # Calculate the representative STCs(rSTCs) for each ROI.
         stcs_path = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/%s/' % evt_st)
         '''epo's time range is from -0.2~0.8s
         '''
-        cal_labelts(stcs_path, func_list_file, condition=evt_st, 
+        stcs_path = sorted(stcs_path)
+        cal_labelts(stcs_path, func_list_file, src_inv, condition=evt_st, 
                     min_subject='fsaverage', subjects_dir=subjects_dir)
     print '>>> FINISHED with rSTC generation.'
     print ''
@@ -90,7 +96,8 @@ if do_extract_rSTCs:
 # Normalization STCs
 if do_norm:
     print '>>> Calculate normalized rSTCs ....'
-    ts_path = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts.npz')
+    ts_path = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts.npy')
+    ts_path = sorted(ts_path)
     normalize_data(ts_path)
     print '>>> FINISHED with normalized rSTC generation.'
     print ''
@@ -100,44 +107,41 @@ if do_norm:
 # 2) Causality analysis
 if do_morder:
     print '>>> Calculate the optimized Model order....'
-    fn_norm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npz')
+    fn_norm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npy')
+    fn_norm = sorted(fn_norm)
     # Get optimized model order using BIC
     fn_npyout = subjects_dir+'/fsaverage/stcs/bics_esti.jpg'
-    model_order(fn_norm, p_max=100, fn_figout=fn_npyout)
+    model_order1(fn_norm, 100, fn_figout=fn_npyout)
     print '>>> FINISHED with optimized model order generation.'
     print ''
 
 if do_moesti:
     print '>>> Envaluate the cosistency, whiteness, and stable features of the Model....'
-    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm,morder*.npz')
+    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npz')
+    fn_monorm = sorted(fn_monorm)
     fn_evalout = subjects_dir+'/fsaverage/stcs/estiMVAR.txt'
-    #model_estimation(fn_monorm, morder=40)
     model_estimation(fn_monorm, fn_evalout)
     print '>>> FINISHED with the results of statistical tests generation.'
     print ''
 
 if do_cau:
     print '>>> Make the causality analysis....'
-    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm,morder*.npz')
-    # fn_monorm = glob.glob(cau_path + '/*[0-9]/*_labels_ts,norm.npy')
-    #causal_analysis(fn_monorm[1:16], repeats=1000, morder=40, per=per, method='GPDC')
-    causal_analysis(fn_monorm, repeats=1000, per=per, method='GPDC')
+    fn_monorm = glob.glob(subjects_dir+'/fsaverage/stcs/*[0-9]/*_labels_ts,norm.npz')
+    fn_monorm = sorted(fn_monorm)
+    fn_labels = subjects_dir+'/fsaverage/MNE_conf_stc/STC_ROI/func_list.npy'
+    ROIs_labels = np.load(fn_labels)
+    causal_analysis(fn_monorm, ROIs=ROIs_labels, repeats=repeat, per=per, method='GPDC', msave=True)
     print '>>> FINISHED with causal matrices and surr-causal matrices generation.'
-    print ''
-
-if do_sig_thr:
-    print '>>> Calculate the significance of the causality matrices....'
-    fn_cau = glob.glob(cau_path + '/*[0-9]/sig_cau_40/*,cau.npy')
-    sig_thresh(cau_list=fn_cau, per=per)
-    print '>>> FINISHED with significant causal matrices generation.'
     print ''
 
 if do_group:
     print '>>> Generate the group causal matrices....'
     for evt_st in st_list:
         out_path = cau_path + '/causality'
-        fnsig_list = glob.glob(cau_path + '/*[0-9]/sig_cau_40/%s_sig_con_band.npy' %evt_st)
-        group_causality(fnsig_list, evt_st, ROI_labels=ROIs, submount=10, out_path=out_path)
+        fnsig_list = glob.glob(cau_path + '/*[0-9]/sig_cau_21/%s_sig_con_band.npy' %evt_st)
+        fn_labels = subjects_dir+'/fsaverage/MNE_conf_stc/STC_ROI/func_list.npy'
+        ROIs_labels = np.load(fn_labels)
+        group_causality(fnsig_list, evt_st, freqs, ROIs_labels, submount=9, out_path=out_path)
     print '>>> FINISHED with group causal matrices generation.'
     print ''
 
@@ -147,4 +151,6 @@ if do_diff:
         fmin = ifreq[0]
         fmax = ifreq[1]
         mat_dir = cau_path + '/causality'
-        diff_mat(fmin=fmin, fmax=fmax, mat_dir=mat_dir, ROI_labels=ROIs)
+        fn_labels = subjects_dir+'/fsaverage/MNE_conf_stc/STC_ROI/func_list.npy'
+        ROIs_labels = np.load(fn_labels)
+        diff_mat(fmin=fmin, fmax=fmax, mat_dir=mat_dir, ROI_labels=ROIs_labels)

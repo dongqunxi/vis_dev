@@ -79,7 +79,7 @@ def apply_STC_epo(fnepo, event, method='MNE', snr=1.0, min_subject='fsaverage',
             s = s + 1
 
 
-def cal_labelts(stcs_path, fn_func_list, condition='LLst',
+def cal_labelts(stcs_path, fn_func_list, src_inv, condition='LLst',
                 min_subject='fsaverage', subjects_dir=None):
     '''
     Extract stcs from special ROIs, and store them for funther causality
@@ -96,13 +96,32 @@ def cal_labelts(stcs_path, fn_func_list, condition='LLst',
     min_subject: the subject for common brain
     '''
     path_list = get_files_from_list(stcs_path)
-    minpath = subjects_dir + '/%s' % (min_subject)
-    srcpath = minpath + '/bem/fsaverage-ico-5-src.fif'
-    src_inv = mne.read_source_spaces(srcpath)
+    
     # loop across all filenames
+     # Get common labels
+    list_file = fn_func_list
+    
+    with open(list_file, 'r') as fl:
+                file_list = [line.rstrip('\n') for line in fl]
+    fl.close()
+    rois = []
+    labels = []
+    for f in file_list:
+        label = mne.read_label(f)
+        labels.append(label)
+        print label
+        rois.append(label.name)
+    
+    rois = np.array(rois)
+    if condition == 'LLst':
+        fn_labels = fn_func_list[:fn_func_list.rfind('.txt')] + '.npy'
+        np.save(fn_labels, rois)
+        import pdb
+        pdb.set_trace()
     for stcs_path in path_list:
         caupath = stcs_path[:stcs_path.rfind('/%s' % condition)]
-        fn_stcs_labels = caupath + '/%s_labels_ts.npz' % (condition)
+        fn_rSTCs = caupath + '/%s_labels_ts.npy' % (condition)
+        #fn_base_stcs = fn_stcs_labels[:fn_stcs_labels.rfind('_label')] + '_baseline.npy'
         _, _, files = os.walk(stcs_path).next()
         trials = len(files) / 2
         # Get unfiltered and morphed stcs
@@ -110,30 +129,29 @@ def cal_labelts(stcs_path, fn_func_list, condition='LLst',
         i = 0
         while i < trials:
             fn_stc = stcs_path + 'trial%s_fsaverage' % (str(i))
-            stc = mne.read_source_estimate(fn_stc + '-lh.stc',
-                                           subject=min_subject)
+            stc = mne.read_source_estimate(fn_stc + '-lh.stc', subject=min_subject)
             stcs.append(stc)
+            #stcs.append(stc.data)
+            #stcs.append(stc.crop(0, stc.times.max()))
             i = i + 1
-        # Get common labels
-        list_file = fn_func_list
-        with open(list_file, 'r') as fl:
-                  file_list = [line.rstrip('\n') for line in fl]
-        fl.close()
-        rois = []
-        labels = []
-        for f in file_list:
-            label = mne.read_label(f)
-            labels.append(label)
-            rois.append(label.name)
+       
         # Extract stcs in common labels
-        label_ts = mne.extract_label_time_course(stcs, labels, src_inv,
-                                                 mode='pca_flip')
+        
+        label_ts = mne.extract_label_time_course(stcs, labels, src_inv, mode='pca_flip')
         # make label_ts's shape as (sources, samples, trials)
-        label_ts = np.asarray(label_ts).transpose(1, 2, 0)
-        rois = np.array(rois)
-        np.savez(fn_stcs_labels, X=label_ts, S=rois)
-
-
+        label_ts = np.array(label_ts).transpose(1, 2, 0)
+        np.save(fn_rSTCs, label_ts)
+        #import pdb
+        #pdb.set_trace()
+        #bs_stcs = np.asarray(bs_stcs).transpose(1, 2, 0)
+        #d_mu = bs_stcs.mean()
+        #d_std = bs_stcs.std()
+        #z_data = (label_ts - d_mu) / d_std
+        #pre_ = fn_norm.split('/')[-2] + '_%s' %fn_norm.split('/')[-1].split('_')[0]
+        #print '%s, scalar: mean %f, std %s' %(pre_, d_mu, d_std)
+        #import pdb
+        #pdb.set_trace()
+        
 
 def normalize_data(fn_ts, pre_t=0.2, fs=678.17):
     '''
@@ -153,18 +171,28 @@ def normalize_data(fn_ts, pre_t=0.2, fs=678.17):
     path_list = get_files_from_list(fn_ts)
     # loop across all filenames
     for fnts in path_list:
-        fnnorm = fnts[:fnts.rfind('.npz')] + ',norm.npz'
-        npz = np.load(fnts)
-        ts = npz['X']
+        fnnorm = fnts[:fnts.rfind('.npy')] + ',norm.npy'
+        ts = np.load(fnts)
+        #ts = np.load(fnts)
         d_pre = ts[:, :int(pre_t*fs), :]
         d_pos = ts[:, int(pre_t*fs):, :]
-        d_mu = d_pre.mean(axis=1, keepdims=True)
-        d_std = d_pre.std(axis=1, ddof=1, keepdims=True)
+        print 'normalize data'
+        #d_mu = d_pre.mean(axis=1, keepdims=True)
+        #d_std = d_pre.std(axis=1, ddof=1, keepdims=True)
+        d_mu = []
+        d_std = []
+        for d_ in d_pre:
+            d_mu.append(d_.mean(keepdims=True))
+            d_std.append(d_.std(ddof=1, keepdims=True))
+        
+        d_mu = np.array(d_mu)
+        d_std = np.array(d_std)
         z_data = (d_pos - d_mu) / d_std
-        np.savez(fnnorm, X=z_data, S=npz['S'])
+        #pre_ = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
+        np.save(fnnorm, z_data)
 
 
-def _plot_morder(bics, morder, figmorder):
+def _plot_morder(bics, figmorder):
     '''
     Parameter
     ---------
@@ -180,15 +208,69 @@ def _plot_morder(bics, morder, figmorder):
     
     #h0, = plt.plot(np.arange(len(bic)) + 1, bic, 'r', linewidth=3)
     #plt.legend([h0], ['BIC: %d' % morder])
-    plt.plot(np.arange(bics.shape[1]) + 1, bics.T)
+    
+    
     plt.xlabel('order')
     plt.ylabel('BIC')
-    plt.title('Model Order: %d' %morder)
+    om_list = set(np.argmin(bics, axis=-1))
+    for i in om_list:
+        sub_bics = bics[np.argmin(bics, axis=-1)==i]
+        plt.plot(np.arange(sub_bics.shape[1]) + 1, sub_bics.T)
+        ymin, ymax = plt.ylim()
+        plt.vlines(i, ymin, ymax, label='Model Order: %d' %(i+1))
+    plt.legend(loc='best')
     plt.show()
     plt.savefig(figmorder, dpi=300)
     plt.close()
 
-
+def model_order1(fn_norm, m_max=0, fn_figout=None):
+    '''Estimate AR order with BIC
+    parameters
+    ----------
+    X: ndarray, shape (trials, n_channels, n_samples)
+    m_max: int
+        The maximum model order to test
+    
+    Reference
+    ---------
+    [1] Mingzhou Ding, Yonghong Chen. Granger Causality: Basic
+    Theory and Application to Neuroscience. Elsevier Science,
+    7 February 2008.
+    
+    Returns
+    -------
+    o_m: int
+        Estimated order
+    bic: list, bics for the model orders from 1 to m_max
+    '''
+    import scot
+    from scipy import linalg
+    path_list = get_files_from_list(fn_norm)
+    bics = []
+    # loop across all filenames
+    for fnnorm in path_list:
+        X_org = np.load(fnnorm)
+        X = X_org.transpose(2,0,1)
+        N, p, n = X.shape
+        bic = []
+        for m in range(m_max):
+            mvar = scot.var.VAR(m+1)
+            mvar.fit(X)
+            sigma = mvar.rescov
+            m_bic = np.log(linalg.det(sigma))
+            m_bic += (p ** 2) * m * np.log(N*n) / (N*n)
+            bic.append(m_bic)
+            #print ('model order: %d, BIC value: %.2f' %(m+1, bic[m]))
+        o_m = np.argmin(bic) + 1
+        print ('model order: %d' %(o_m))
+        fnnorm_p = fnnorm[:fnnorm.rfind('.npy')] + '.npz' 
+        np.savez(fnnorm_p, X=X_org, morder=o_m)
+        bics.append(bic)
+    bics = np.array(bics)
+    fn_bics = fn_figout[:fn_figout.rfind('.jpg')] + '.npy' 
+    np.save(fn_bics, bics)
+    _plot_morder(bics, fn_figout)
+    
 def model_order(fn_norm, p_max=0, fn_figout=None):
     """
     Calculate the optimized model order for VAR
@@ -209,9 +291,9 @@ def model_order(fn_norm, p_max=0, fn_figout=None):
     bics = []
     # loop across all filenames
     for fnnorm in path_list:
-        npz = np.load(fnnorm)
-        X = npz['X']
+        X = np.load(fnnorm)
         n, m, N = X.shape
+        X = X - X.mean()
         if p_max == 0:
             p_max = m - 1
         q = p_max
@@ -233,8 +315,6 @@ def model_order(fn_norm, p_max=0, fn_figout=None):
         kb = range(q1n - kn, q1n)
         XF = np.reshape(XX[:, 0:k, k:m, :], (kn, M), order='F')
         XB = np.reshape(XX[:, 0:k, k - 1:m - 1, :], (kn, M), order='F')
-        # import pdb
-        # pdb.set_trace()
         CXF = np.linalg.cholesky(XF.dot(XF.T)).T
         CXB = np.linalg.cholesky(XB.dot(XB.T)).T
         AF[:, kf] = np.linalg.solve(CXF.T, I)
@@ -274,8 +354,8 @@ def model_order(fn_norm, p_max=0, fn_figout=None):
         morder = np.nanargmin(bic) + 1
         bics.append(bic)
         #figmorder = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.png' % morder
-        fnnorm_p = fnnorm[:fnnorm.rfind('.npz')] + ',morder_%d.npz' % morder
-        np.savez(fnnorm_p, X=npz['X'], S=npz['S'], morder=morder)
+        fnnorm_p = fnnorm[:fnnorm.rfind('.npy')] + '.npz' 
+        np.savez(fnnorm_p, X=X, morder=morder)
         #return morder
     bics = np.array(bics).squeeze(axis=-1)
     #np.save(fn_figout, bics)
@@ -316,6 +396,8 @@ def _tsdata_to_var(X,p):
     kb = range(q1n - kn, q1n)
     XF = np.reshape(XX[:, 0:k, k:m, :], (kn, M), order='F')
     XB = np.reshape(XX[:, 0:k, k - 1:m - 1, :], (kn, M), order='F')
+    #import pdb
+    #pdb.set_trace()
     CXF = np.linalg.cholesky(XF.dot(XF.T)).T
     CXB = np.linalg.cholesky(XB.dot(XB.T)).T
     AF[:, kf] = np.linalg.solve(CXF.T, I)
@@ -448,8 +530,7 @@ def _consistency(X, E):
     return cons
 
 
-def model_estimation(fn_norm, fn_eval, thr_cons=0.8, whit_min=1., whit_max=3.,
-                     morder=None):
+def model_estimation(fn_norm, fn_eval, thr_cons=0.8, whit_min=1., whit_max=3):
     '''
     Check the statistical evalutions of the MVAR model corresponding the
     optimized morder.
@@ -478,22 +559,17 @@ def model_estimation(fn_norm, fn_eval, thr_cons=0.8, whit_min=1., whit_max=3.,
         #fneval = fnnorm[:fnnorm.rfind('.npz')] + '_evaluation.txt'
         pre_ = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
         npz = np.load(fnnorm)
-        if morder == None:
-            morder = npz['morder'].flatten()[0]
-            #fneval = fnnorm[:fnnorm.rfind('.npz')] + '_evaluation.txt'
-        #else:
-            #fneval = fnnorm[:fnnorm.rfind(',morder')] + ',morder_%d_evaluation.txt' % morder
-        #X = np.load(fnnorm)
+        morder = npz['morder'].flatten()[0]
         print '>>> Model order is %d....' % morder
         
         X = npz['X']
         A, SIG, E = _tsdata_to_var(X, morder)
         whi = False
         dw, pval = _whiteness(X, E)
-        #if np.all(dw < whit_max) and np.all(dw > whit_min):
-        #    whi = True
-        if np.all(pval < 0.05):
+        if np.all(dw < whit_max) and np.all(dw > whit_min):
             whi = True
+        #if np.all(pval < 0.05):
+         #   whi = True
         cons = _consistency(X, E)
         X = X.transpose(2, 0, 1)
         mvar = scot.var.VAR(morder)
@@ -508,7 +584,7 @@ def model_estimation(fn_norm, fn_eval, thr_cons=0.8, whit_min=1., whit_max=3.,
                     % (pre_, morder, str(whi), cons, str(is_st)))
 
 
-def _plot_hist(con_b, surr_b, fig_out):
+def _plot_hist(con_b, surr_b, fig_out, pre_):
     '''
      Plot the distribution of real and surrogates' causality results.
      Parameter
@@ -523,17 +599,17 @@ def _plot_hist(con_b, surr_b, fig_out):
     import matplotlib.pyplot as pl
     fig = pl.figure('Histogram - surrogate vs real')
     c = con_b  # take a representative freq point
-    fig.add_subplot(211, title='Histogram - real connectivity')
+    fig.add_subplot(211, title='%s - real connectivity' %pre_)
     pl.hist(c, bins=100)  # plot histogram with 100 bins (representative)
     s = surr_b
-    fig.add_subplot(212, title='Histogram - surrogate connectivity')
+    fig.add_subplot(212, title='%s - surrogate connectivity' %pre_)
     pl.hist(s, bins=100)  # plot histogram
-    pl.show()
+    #plt.show()
     pl.savefig(fig_out)
-    pl.close()
+    pl.close(fig)
 
 
-def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out):
+def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out, title):
     '''
     Plot the significant threshold of causality analysis.
     Parameter
@@ -548,8 +624,9 @@ def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out):
        The path to store the threshold plots.
     '''
     # plt.ioff()
-    plt.close('all')
+    #plt.close('all')
     c = np.unique(con_b)
+    plt.figure('thre')
     plt.plot(c, 'k', label='real con')
     xmin, xmax = plt.xlim()
     plt.hlines(fdr_thr, xmin, xmax, linestyle='--', colors='k',
@@ -560,15 +637,68 @@ def _plot_thr(con_b, fdr_thr, max_thr, alpha, fig_out):
     plt.legend()
     plt.xlabel('points')
     plt.ylabel('causality values')
+    plt.title(title)
     # pl.show()
     plt.savefig(fig_out)
-    plt.close()
+    plt.close('thre')
     return
 
-
-def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
-                    msave=True, per=99.99, sfreq=678,
-                    freqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30, 40)]):
+def _plot_spectral(cau, surr, ROIs, sfreq, nfft, freqs, per, title, fn_fig):
+    
+    delta_F = sfreq / float(2 * nfft)
+    freqs_band = (freqs[0][0], freqs[-1][-1])
+    fmin_c, fmax_c = int(freqs_band[0] / delta_F), int(freqs_band[1] / delta_F)
+    freq = np.linspace(0, sfreq / 2, nfft)
+    freqs = freq[fmin_c:fmax_c+1]
+    fmin, fmax = freq[fmin_c], freq[fmax_c+1]
+    c0 = np.percentile(surr, per, axis=0)
+    c0 = c0[ :6, :6, fmin_c:fmax_c+1]
+    con = cau[:6, :6, fmin_c:fmax_c+1]
+    n_rows, n_cols = con.shape[:2]
+    names = ROIs
+    bands_b = []
+    for b_freq in freqs:
+        bands_b.append(b_freq[-1])
+        
+    plt.figure('spectral1',figsize=(25,25))
+    fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True)
+    plt.suptitle(title)
+    
+    for i in range(n_rows):
+        for j in range(i + 1):
+            if i == j:
+                axes[i, j].set_axis_off()
+                continue
+    
+            axes[i, j].plot(freqs, con[i, j, :], 'r')
+            axes[j, i].plot(freqs, con[j, i, :], 'r')
+            axes[i, j].fill_between(freqs, c0[i, j, :], 0)
+            axes[j, i].fill_between(freqs, c0[j, i, :], 0)
+    
+            if j == 0:
+                axes[i, j].set_ylabel(names[i])
+                axes[0, i].set_title(names[i])
+            if i == (n_rows - 1):
+                axes[i, j].set_xlabel(names[j])
+            axes[i, j].set_xlim([fmin, fmax])
+            axes[i, j].set_ylim([0, 0.4])
+            axes[j, i].set_xticks(bands_b)
+            axes[j, i].set_yticks([0, 0.2, 0.4])
+            axes[j, i].set_xlim([fmin, fmax])
+    
+            # Show band limits
+            for f in bands_b:
+                axes[i, j].axvline(f, color='k')
+                axes[j, i].axvline(f, color='k')
+                
+    plt.savefig(fn_fig)          
+    plt.close('spectral')
+    return
+    
+    
+def causal_analysis(fn_norm, ROIs=None, method='GPDC', morder=None, repeats=1000,
+                    msave=False, plt_spectral=False, per=99.99, sfreq=678, ncond=4,
+                    freqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30, 45)]):
     '''
     Calculate causality matrices of real data and surrogates. And calculate
     the significant causal matrix for each frequency band.
@@ -582,6 +712,8 @@ def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
         causality measures.
     repeats: int
         Shuffling times for surrogates.
+    plt_spectral: bool
+        Save the causal spectral matrix.
     msave: bool
         Save the causal matrix of the whole frequency domain or not.
     per: float or int
@@ -596,77 +728,132 @@ def causal_analysis(fn_norm, method='GPDC', morder=None, repeats=1000,
     import scot
     path_list = get_files_from_list(fn_norm)
     # loop across all filenames
-    for fnnorm in path_list:
-        cau_path = os.path.split(fnnorm)[0]
-        name = os.path.basename(fnnorm)
-        condition = name.split('_')[0]
-        npz = np.load(fnnorm)
-        if morder == None:
-            morder = npz['morder'].flatten()[0]
-            fncau = fnnorm[:fnnorm.rfind('.npz')] + ',cau.npy' 
-            fnsurr = fnnorm[:fnnorm.rfind('.npz')] + ',surrcau.npy'
-        else:
-            fncau = fnnorm[:fnnorm.rfind(',morder')] + ',morder%d,cau.npy' % morder
-            fnsurr = fnnorm[:fnnorm.rfind(',morder')] + ',morder%d,surrcau.npy' % morder
+    nsubjects = len(path_list)/ncond
+    fn_list = np.reshape(path_list,(nsubjects,ncond)) 
+    bands = ['theta', 'alpha', 'beta1', 'beta2', 'gamma']
+    for isubj in range(nsubjects):
+        plt.figure('axes')
+        sub_fig = [221, 222, 223, 224]
+       
+        for icond in range(ncond):
+            fnnorm = fn_list[isubj, icond]
+            title = fnnorm.split('/')[-2] + '_%s' %fnnorm.split('/')[-1].split('_')[0]
+            cau_path = os.path.split(fnnorm)[0]
+            name = os.path.basename(fnnorm)
+            condition = name.split('_')[0]
+            npz = np.load(fnnorm)
+            if morder == None:
+                morder = npz['morder'].flatten()[0]
+                fncau = fnnorm[:fnnorm.rfind('.npz')] + ',cau.npy' 
+                fnsurr = fnnorm[:fnnorm.rfind('.npz')] + ',surrcau.npy'
+            else:
+                fncau = fnnorm[:fnnorm.rfind('.npy')] + ',morder%d,cau.npy' % morder
+                fnsurr = fnnorm[:fnnorm.rfind('.npy')] + ',morder%d,surrcau.npy' % morder
+            
+            sig_path = cau_path + '/sig_cau_%d/' % morder
+            set_directory(sig_path)
+            
+            X = npz['X']
+            X = X.transpose(2, 0, 1)
+            mvar = scot.var.VAR(morder)
+            surr = scs.surrogate_connectivity(method, X, mvar,
+                                            repeats=repeats)
+            mvar.fit(X)
+            cau = connectivity(method, mvar.coef, mvar.rescov)
+            nfft = cau.shape[-1]
+            delta_F = sfreq / float(2 * nfft)
+            
+            if plt_spectral:
+                fn_fig = fncau[:fncau.rfind('.npy')] + '.png'
+                _plot_spectral(cau, surr, ROIs, sfreq, nfft, freqs, per, title, fn_fig)
+                #import pdb
+                #pdb.set_trace()
+            if msave:
+                np.save(fncau, cau)
+                np.save(fnsurr, surr)
+                import pdb
+                pdb.set_trace()
+                
+            
+            sig_freqs = []
+            nfreq = len(freqs)
+            surr_bands = []
+            cau_bands = []
+            
+            thres = []
+            maxes = []
+            for ifreq in range(nfreq):
+                print 'Frequency index used..', ifreq
+                fmin, fmax = int(freqs[ifreq][0] / delta_F), int(freqs[ifreq][1] /
+                                                                delta_F)
+                con_band = np.mean(cau[:, :, fmin:fmax + 1], axis=-1)
+                np.fill_diagonal(con_band, 0)
+                surr_band = np.mean(surr[:, :, :, fmin:fmax + 1], axis=-1)
+                r, s, _ = surr_band.shape
+                for i in xrange(r):
+                    ts = surr_band[i]
+                    np.fill_diagonal(ts, 0)
+                surr_bands.append(surr_band)
+                cau_bands.append(con_band)
+                con_b = con_band.flatten()
+                con_b = con_b[con_b > 0]
+                surr_b = surr_band.reshape(r, s * s)
+                surr_b = surr_b[surr_b > 0]
+                
+                thr = np.percentile(surr_band, per)
+                max_value = surr_band.max()
+                thres.append(thr)
+                maxes.append(max_value)
+                
+                print 'max surrogates %.4f' % thr
+                con_band[con_band < thr] = 0
+                con_band[con_band >= thr] = 1
+                histout = sig_path + '%s,%d-%d,distribution.png'\
+                    % (condition, freqs[ifreq][0], freqs[ifreq][1])
+                throut = sig_path + '%s,%d-%d,threshold.png'\
+                    % (condition, freqs[ifreq][0], freqs[ifreq][1])
+                _plot_hist(con_b, surr_b, histout, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
+                # _plot_thr(con_b, thr, surr_band.max(), alpha, throut)
+                _plot_thr(con_b, thr, max_value, per, throut, title + ',%d-%dHz' %(freqs[ifreq][0], freqs[ifreq][1]))
+                sig_freqs.append(con_band)
+    
+            sig_freqs = np.array(sig_freqs)
+            print 'Saving computed arrays..'
+            np.save(sig_path + '%s_sig_con_band.npy' % condition, sig_freqs)
+            del cau, surr
+            
+            ax = plt.subplot(sub_fig[icond])
+            plt.ylim(0, 0.5)
+            ax.set_xlabel('bands')
+            ax.set_ylabel('scales')
+            plt.title('%s' %fnnorm.split('/')[-1].split('_')[0])
+            
+            width = 0.35
+            index = np.arange(len(thres)) 
+            
+            plt.bar(index, thres, width, color='blue', label='99.99per')
+            i = 0
+            for x, y in zip(index, thres): 
+                plt.text(x+0.3,y+0.01, '%.2f' %y, ha='center', va='bottom', rotation=90)
+                i = i + 1
+            
+            plt.bar(index+width, maxes, width, color='yellow', label='maxes')
+            j = 0
+            for x, y in zip(index, maxes): 
+                plt.text(x+0.6,y+0.01, '%.2f' %y, ha='center', va='bottom', rotation=90)
+                j = j + 1
+                
+            plt.xticks(index + width, bands)
+            plt.legend(loc='upper center', fontsize='x-small')
+            #plt.legend(loc='upper left')
         
-        sig_path = cau_path + '/sig_cau_%d/' % morder
-        set_directory(sig_path)
-        
-        X = npz['X']
-        X = X.transpose(2, 0, 1)
-        mvar = scot.var.VAR(morder)
-        surr = scs.surrogate_connectivity(method, X, mvar,
-                                          repeats=repeats)
-        mvar.fit(X)
-        cau = connectivity(method, mvar.coef, mvar.rescov)
-        if msave:
-            np.save(fncau, cau)
-            np.save(fnsurr, surr)
-        nfft = cau.shape[-1]
-        delta_F = sfreq / float(2 * nfft)
-        sig_freqs = []
-        nfreq = len(freqs)
-        surr_bands = []
-        cau_bands = []
-        for ifreq in range(nfreq):
-            print 'Frequency index used..', ifreq
-            fmin, fmax = int(freqs[ifreq][0] / delta_F), int(freqs[ifreq][1] /
-                                                             delta_F)
-            con_band = np.mean(cau[:, :, fmin:fmax + 1], axis=-1)
-            np.fill_diagonal(con_band, 0)
-            surr_band = np.mean(surr[:, :, :, fmin:fmax + 1], axis=-1)
-            r, s, _ = surr_band.shape
-            for i in xrange(r):
-                ts = surr_band[i]
-                np.fill_diagonal(ts, 0)
-            surr_bands.append(surr_band)
-            cau_bands.append(con_band)
-            con_b = con_band.flatten()
-            con_b = con_b[con_b > 0]
-            surr_b = surr_band.reshape(r, s * s)
-            surr_b = surr_b[surr_b > 0]
-            thr = np.percentile(surr_band, per)
-            print 'max surrogates %.4f' % thr
-            con_band[con_band < thr] = 0
-            con_band[con_band >= thr] = 1
-            histout = sig_path + '%s,%d-%d,distribution.png'\
-                % (condition, freqs[ifreq][0], freqs[ifreq][1])
-            throut = sig_path + '%s,%d-%d,threshold.png'\
-                % (condition, freqs[ifreq][0], freqs[ifreq][1])
-            _plot_hist(con_b, surr_b, histout)
-            # _plot_thr(con_b, thr, surr_band.max(), alpha, throut)
-            _plot_thr(con_b, thr, surr_band.max(), per, throut)
-            # con_band[con_band < z_thre] = 0
-            # con_band[con_band >= z_thre] = 1
-            sig_freqs.append(con_band)
-
-        sig_freqs = np.array(sig_freqs)
-        print 'Saving computed arrays..'
-        np.save(sig_path + '%s_sig_con_band.npy' % condition, sig_freqs)
-        cau_bands = np.array(cau_bands)
-        np.save(fncau, cau_bands)
-        surr_bands = np.array(surr_bands)
-        np.save(fnsurr, surr_bands)
+        plt.suptitle(fnnorm.split('/')[-2])
+        plt.tight_layout()
+        fn_fig_out = sig_path + '%s_sig_con_band.png' %fnnorm.split('/')[-2]
+        plt.savefig(fn_fig_out)
+        plt.close('axes')
+        #import pdb
+        #pdb.set_trace()
 
     return
 
@@ -698,7 +885,7 @@ def sig_thresh(cau_list, freqs, per=99.99, sfreq=678):
         surr = np.load(fnsurr)
         nfft = cau.shape[-1]
         delta_F = sfreq / float(2 * nfft)
-        # freqs = [(4, 8), (8, 12), (12, 18), (18, 30), (30, 70), (60, 90)]
+        
         sig_freqs = []
         nfreq = len(freqs)
         for ifreq in range(nfreq):
@@ -732,9 +919,48 @@ def sig_thresh(cau_list, freqs, per=99.99, sfreq=678):
         sig_freqs = np.array(sig_freqs)
         np.save(sig_path + '%s_sig_con_band.npy' %condition, sig_freqs)
 
+def common_causality(sig_list, condition, freqs, ROI_labels, out_path, p_val):
 
-def group_causality(sig_list, condition, ROI_labels, freqs,
-                    out_path=None, submount=10):
+    """
+    Make group causality analysis, by evaluating significant matrices across
+    subjects.
+    ----------
+    sig_list: list
+        The path list of individual significant causal matrix.
+    condition: string
+        One condition of the experiments.
+    freqs: list
+        The list of interest frequency band.
+    min_subject: string
+        The subject for the common brain space.
+    submount: int
+        Significant interactions come out at least in 'submount' subjects.
+    """
+    from scipy.stats import ttest_1samp
+    print 'Running group causality...'
+    set_directory(out_path)
+    sig_caus = []
+
+    for f in sig_list:
+        sig_cau = np.load(f)
+        print sig_cau.shape[-1]
+        sig_caus.append(sig_cau)
+
+    sig_caus = np.array(sig_caus)
+    for ifreq in xrange(len(freqs)):
+        b_caus = sig_caus[:, ifreq, :, :]
+        subjs, ns = b_caus.shape[:2]
+        b_caus = b_caus.reshape(subjs, ns*ns)
+        popmean = 0#expected value in null hypothesis
+        t_,p_ = ttest_1samp(b_caus,popmean)
+        #set nonsignificant values as 0
+        #set significant values as 1
+        p_[p_>p_val]=0
+        p_[p_>0] = 1
+        com_con = p_.reshape(ns,ns)
+    return
+
+def group_causality(sig_list, condition, freqs, ROI_labels, out_path=None, submount=10):
 
     """
     Make group causality analysis, by evaluating significant matrices across
@@ -772,8 +998,8 @@ def group_causality(sig_list, condition, ROI_labels, freqs,
         cmap = plt.get_cmap('hot', cau_band.max()+1-submount)
         cmap.set_under('gray')
         plt.matshow(cau_band, interpolation='nearest', vmin=submount, cmap=cmap)
-        plt.xticks(np.arange(16), ROI_labels, fontsize=9, rotation='vertical')
-        plt.yticks(np.arange(16), ROI_labels, fontsize=9)
+        plt.xticks(np.arange(len(ROI_labels)), ROI_labels, fontsize=9, rotation='vertical')
+        plt.yticks(np.arange(len(ROI_labels)), ROI_labels, fontsize=9)
         # pl.imshow(cau_band, interpolation='nearest')
         # pl.set_cmap('BlueRedAlpha')
         np.save(out_path + '/%s_%s_%sHz.npy' %
@@ -785,15 +1011,15 @@ def group_causality(sig_list, condition, ROI_labels, freqs,
 
         plt.colorbar(ticks=v, extend='min')
         # pl.show()
+        plt.xlabel('%s_%s_%sHz.png' %(condition, str(fmin), str(fmax)))
+        #plt.tight_layout()
         plt.savefig(out_path + '/%s_%s_%sHz.png' %
                     (condition, str(fmin), str(fmax)), dpi=300)
         plt.close()
     return
 
 
-def plt_conditions(cau_path, st_list,
-                   nfreqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30,40)],
-                   am_ROI=21):
+def plt_conditions(cau_path, st_list, ROI_labels, nfreqs=[(4, 8), (8, 12), (12, 18), (18, 30), (30,45)]):
 
     '''
     Plot the causal matrix of each frequency band
@@ -810,7 +1036,7 @@ def plt_conditions(cau_path, st_list,
         The amount of ROIs
     '''
 
-    lbls = np.arange(am_ROI) + 1
+    #lbls = np.arange(am_ROI) + 1
     for ifreq in nfreqs:
         fmin, fmax = ifreq[0], ifreq[1]
         fig_fobj = cau_path + '/conditions4_%d_%dHz.tiff' % (fmin, fmax)
@@ -823,10 +1049,10 @@ def plt_conditions(cau_path, st_list,
             title = st_list[i]
             ax.grid(False)
             ax.set_title(title)
-            ax.set_yticks(np.arange(am_ROI))
-            ax.set_xticks(np.arange(am_ROI))
-            ax.set_xticklabels(lbls)
-            ax.set_yticklabels(lbls)
+            ax.set_yticks(np.arange(len(ROI_labels)))
+            ax.set_xticks(np.arange(len(ROI_labels)))
+            ax.set_xticklabels(ROI_labels)
+            ax.set_yticklabels(ROI_labels)
         # fig.colorbar(im, cax=cbar_ax)
         fig.tight_layout()
         fig.savefig(fig_fobj)
@@ -871,7 +1097,8 @@ def diff_mat(fmin, fmax, mat_dir=None, ROI_labels=None,
     plt.matshow(dif_cau, interpolation='nearest')
     plt.xticks(np.arange(am_ROI), ROI_labels, fontsize=9, rotation='vertical')
     plt.yticks(np.arange(am_ROI), ROI_labels, fontsize=9)
-    # pl.tight_layout(pad=2)
+    plt.xlabel('incon - con_%d-%dHz' % (fmin, fmax))
+    #plt.tight_layout()
     # pl.show()
     plt.savefig(fig_dif, dpi=300)
     plt.close()
