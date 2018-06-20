@@ -43,12 +43,13 @@ conditions = ['LLst', 'RRst', 'RLst', 'LRst', 'LLrt', 'RRrt', 'RLrt', 'LRrt']
 #fn_stcdata = stcs_path + 'stcsdata.npy'
 vert_size = 10 # minimum size for ROIs (mm)
 
-do_ROIs = True
+do_ROIs = False
 if do_ROIs:
     reset_directory(labels_path+'ini/')
     for cond in conditions:
         #fn_stc = stcs_path + 'clu2sample_Group_%s_4096_2tail_pthr0.0000001,pv_0.010' %(cond)
-        fn_stc = stcs_path + 'clu1sample_Group_%s_8192_2tail_pct99.99,pv_0.010-rh.stc' %cond
+        fn_stc = stcs_path + 'clu1sample_Group_%s_8192_2tail_pct99.990_20.0,pv_0.010-rh.stc' %cond
+        #fn_stc = stcs_path + 'clu1sample_Group_%s_8192_2tail_pct99.990,pv_0.010-rh.stc' %cond
         stc = mne.read_source_estimate(fn_stc)
         lh_labels, rh_labels = mne.stc_to_label(stc, src=src, smooth=True,
                                         subjects_dir=subjects_dir, connected=True)
@@ -76,7 +77,7 @@ if do_ROIs:
             j = j + 1
 
 # Merge ROIs across conditions
-do_merge = True
+do_merge = False
 if do_merge:
     apply_merge(labels_path)
 
@@ -88,18 +89,21 @@ if do_split:
         the large ROIs. And split them one by one using the following scripts.
     '''
     # The large ROI
-    fn_par_list = glob.glob(labels_path + '/merge/*')
+    fn_par_list = glob.glob(labels_path + '/merge/*.label')
     # The corresponding anatomical labels
     #fnana_list = glob.glob(labels_path + '/func_ana/rh/*')
     analabel_list = mne.read_labels_from_annot('fsaverage', subjects_dir=subjects_dir)
+    #analabel_list = mne.read_labels_from_annot('fsaverage', parc='PALS_B12_Lobes', subjects_dir=subjects_dir)
     ana_path = labels_path + '/func_ana/'
     reset_directory(ana_path)
     for fn_par in fn_par_list:
         par_label = mne.read_label(fn_par, subject='fsaverage')
+        #print (par_label.name, par_label.vertices.shape[0])
         # The path to save splited ROIs
         chis_path = labels_path + '/func_ana/%s/' % par_label.name
         reset_directory(chis_path)
         for ana_label in analabel_list[:-1]:
+        #for ana_label in analabel_list[5:]:
             #ana_label = mne.read_label(fnana)
             overlapped = len(np.intersect1d(ana_label.vertices,
                                             par_label.vertices))
@@ -115,7 +119,9 @@ if do_split:
                 max_dist = round(label_dist.max() * 1000)
                 if max_dist > vert_size:
                     chi_label.save(chis_path+ana_label.name)
-                
+     
+
+                              
 # Merge ROIs with the same anatomical labels.   
 do_merge_ana = False
 if do_merge_ana:
@@ -142,13 +148,9 @@ if do_merge_ana:
             else:
                 shutil.copy(fn_ana, tar_path)
 
-#red_size = True
-#if red_size:
-#    tar_path = labels_path + 'func/'
-#    #fn_src = subjects_dir + '/fsaverage/bem/fsaverage-ico-5-src.fif'
-#    redu_small(tar_path, vert_size, fn_src)
+
     
-do_write_list = False
+do_write_list = True
 if do_write_list:
     tar_path = labels_path + 'func/'
     func_list1 = glob.glob(tar_path + '*-lh.label')

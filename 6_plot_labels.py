@@ -7,8 +7,8 @@ import glob
 import mne
 from surfer import Brain
 
-method = 'MNE'
-#method = 'dSPM'
+#method = 'MNE'
+method = 'dSPM'
 subject_id = 'fsaverage'
 surf = 'inflated'
 
