@@ -16,7 +16,8 @@ hemi = "lh"
 # surf = "smoothwm"
 surf = 'inflated'
 fn_list = glob.glob(labels_dir + '*')
-brain = Brain(subject_id, hemi, surf)
+#brain = Brain(subject_id, hemi, surf)
+brain = Brain(subject_id, hemi, surf, cortex = 'bone', background='white')
 color = ['#990033', '#9900CC', '#FF6600', '#FF3333', '#00CC33']
 
 i = 0

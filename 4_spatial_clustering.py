@@ -13,17 +13,17 @@ do_make_inve = False # Generate inverse operator
 do_inver_ave = False # make STC
 do_morph_STC = False # Morph individual STC
 do_group_STC = False # Group morphed STC into pre and post-stimuls (events)
-do_t_test = True# Spatial clustering
+do_t_test = False# Spatial clustering
 do_2sample = False #2 sample test
 do_clu2STC = True# Transfer cluster arrays into STC objects.
-ex_medial = False # Take the medial wall vertices into cluster estimation
+ex_medial = True # Take the medial wall vertices into cluster estimation
 
 #The main path for ROI definition
 subjects_dir = os.environ['SUBJECTS_DIR']+'/'
 
 # parameter of Inversing and Morphing
-method = 'dSPM'
-#method = 'MNE'
+#method = 'dSPM'
+method = 'MNE'
 snr = 3
 n_jobs = 2
 
@@ -31,8 +31,8 @@ n_jobs = 2
 permutation = 8192
 mt = 1 #max_step for spatio-temporal clustering
 #permutation = 1000   # testing only
-pct = 99.9 # The percentile of baseline STCs distributions
-min_duration = 25# The minimum duration of the significant clusters
+pct = 99.99 # The percentile of baseline STCs distributions
+min_duration = 20# The minimum duration of the significant clusters
 pthr = 0.0000001 #f-threshold
 
 if method == 'dSPM':
@@ -147,6 +147,7 @@ if do_clu2STC:
     from stat_cluster import clu2STC
     #fn_list = glob.glob(stcs_path + 'clu2sample_Group_*_%d_%dtail_pthr%.7f.npz' %(permutation/2, 1+(tail==0), pthr))
     fn_list = glob.glob(stcs_path + 'clu1sample_Group_*_%d_%dtail_pct%.3f_%.1f.npz' %(permutation, 1+(tail==0), pct, min_duration))
+    #fn_list = glob.glob(stcs_path + 'clu1sample_Group_*_%d_%dtail_pct%.3f.npz' %(permutation, 1+(tail==0), pct))
     fn_list = sorted(fn_list)
     clu2STC(fn_list, p_thre=p_v)
     
