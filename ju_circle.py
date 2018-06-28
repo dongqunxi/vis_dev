@@ -3,24 +3,13 @@
 """
 Created on Sat Jun 16 09:19:44 2018
 
-@author: janeyang1987
+@author: Qunxi Dong <dongqunxi@gmail.com>
 """
 
 """
 =========================================================================
 Compute source space connectivity and visualize it using a circular graph
 =========================================================================
-
-This example computes the all-to-all connectivity between 68 regions in
-source space based on dSPM inverse solutions and a FreeSurfer cortical
-parcellation. The connectivity is visualized using a circular graph which
-is ordered based on the locations of the regions.
-"""
-# Authors: Martin Luessi <mluessi@nmr.mgh.harvard.edu>
-#          Alexandre Gramfort <alexandre.gramfort@telecom-paristech.fr>
-#          Nicolas P. Rougier (graph code borrowed from his matplotlib gallery)
-#
-# License: BSD (3-clause)
 
 import numpy as np
 import matplotlib.pyplot as plt
